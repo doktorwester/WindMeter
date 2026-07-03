@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Windmesser">
+<meta name="theme-color" content="#0F1620">
+<title>Windmesser — Live Windgeschwindigkeit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#0F1620;
+    --bg-deep-2:#0A0F16;
+    --panel:#19222C;
+    --panel-line:#2A3542;
+    --mist:#EDF3F5;
+    --muted:#8C9BAA;
+    --muted-dim:#5C6B79;
+    --wind:#4FD1C5;
+    --wind-dim:#2E5C58;
+    --gust:#F2A65A;
+    --danger:#E8735A;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(79,209,197,0.08), transparent),
+      linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-deep-2) 100%);
+    color:var(--mist);
+    font-family:'Inter', sans-serif;
+    min-height:100%;
+    display:flex;
+    justify-content:center;
+    padding:calc(28px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom));
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{
+    width:100%;
+    max-width:420px;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+  }
+
+  /* Header */
+  .eyebrow{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.14em;
+    color:var(--muted);
+    text-transform:uppercase;
+  }
+  .pulse-dot{
+    width:7px; height:7px; border-radius:50%;
+    background:var(--wind);
+    box-shadow:0 0 0 0 rgba(79,209,197,0.6);
+    animation:pulse 2s infinite;
+  }
+  .pulse-dot.off{ background:var(--muted-dim); animation:none; }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(79,209,197,0.5); }
+    70%{ box-shadow:0 0 0 8px rgba(79,209,197,0); }
+    100%{ box-shadow:0 0 0 0 rgba(79,209,197,0); }
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600;
+    font-size:22px;
+    letter-spacing:-0.01em;
+  }
+  .location-line{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .location-name{
+    font-size:14px;
+    color:var(--muted);
+  }
+  .location-name b{ color:var(--mist); font-weight:500; }
+  .coords{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:var(--muted-dim);
+  }
+
+  /* Panel */
+  .panel{
+    background:linear-gradient(180deg, var(--panel), #141C24);
+    border:1px solid var(--panel-line);
+    border-radius:20px;
+    padding:22px;
+    position:relative;
+    overflow:hidden;
+  }
+  .panel::before{
+    content:"";
+    position:absolute; inset:0;
+    background:radial-gradient(circle at 50% 0%, rgba(79,209,197,0.06), transparent 60%);
+    pointer-events:none;
+  }
+
+  /* Dial */
+  .dial-wrap{
+    position:relative;
+    width:100%;
+    max-width:300px;
+    margin:6px auto 4px;
+    aspect-ratio:1/1;
+  }
+  svg.dial{ width:100%; height:100%; overflow:visible; }
+  .tick{ stroke:var(--panel-line); stroke-width:1.5; }
+  .tick.major{ stroke:var(--muted-dim); stroke-width:2; }
+  .cardinal{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    fill:var(--muted);
+    text-anchor:middle;
+  }
+  .cardinal.north{ fill:var(--wind); font-weight:700; }
+  .flow-ring{
+    fill:none;
+    stroke:var(--wind);
+    stroke-width:2;
+    stroke-linecap:round;
+    opacity:0.55;
+    transform-origin:50% 50%;
+  }
+  .needle{
+    transform-origin:150px 150px;
+    transition:transform 0.9s cubic-bezier(.34,1.56,.64,1);
+  }
+  .needle-line{ stroke:var(--wind); stroke-width:3; stroke-linecap:round; }
+  .needle-tip{ fill:var(--wind); }
+  .hub{ fill:var(--bg-deep-2); stroke:var(--wind-dim); stroke-width:2; }
+
+  .readout{
+    position:absolute;
+    top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    text-align:center;
+    pointer-events:none;
+  }
+  .speed-value{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:52px;
+    line-height:1;
+    color:var(--mist);
+    letter-spacing:-0.02em;
+  }
+  .speed-unit{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    color:var(--wind);
+    letter-spacing:0.08em;
+    margin-top:2px;
+  }
+  .unit-toggle{
+    background:none;
+    border:1px solid var(--panel-line);
+    color:var(--muted);
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.06em;
+    padding:5px 10px;
+    border-radius:20px;
+    cursor:pointer;
+    pointer-events:auto;
+    transition:border-color .15s, color .15s;
+  }
+  .unit-toggle:hover{ border-color:var(--wind); color:var(--wind); }
+
+  /* Beaufort */
+  .beaufort{
+    text-align:center;
+    margin-top:10px;
+  }
+  .beaufort-name{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:16px;
+    font-weight:500;
+  }
+  .beaufort-scale{
+    display:flex;
+    gap:3px;
+    justify-content:center;
+    margin-top:10px;
+  }
+  .beaufort-seg{
+    width:14px; height:5px;
+    border-radius:2px;
+    background:var(--panel-line);
+  }
+  .beaufort-seg.filled{ background:var(--wind); }
+  .beaufort-seg.gust-filled{ background:var(--gust); }
+
+  /* Stats row */
+  .stats{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-top:20px;
+  }
+  .stat{
+    background:var(--bg-deep-2);
+    border:1px solid var(--panel-line);
+    border-radius:14px;
+    padding:12px 14px;
+  }
+  .stat-label{
+    font-family:'JetBrains Mono', monospace;
+    font-size:10px;
+    letter-spacing:0.1em;
+    color:var(--muted-dim);
+    text-transform:uppercase;
+  }
+  .stat-value{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:20px;
+    font-weight:600;
+    margin-top:4px;
+    color:var(--mist);
+  }
+  .stat-value.gust{ color:var(--gust); }
+
+  .updated-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-top:16px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:var(--muted-dim);
+  }
+  .refresh-btn{
+    background:none;
+    border:none;
+    color:var(--wind);
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.04em;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:5px;
+  }
+  .refresh-btn svg{ width:12px; height:12px; transition:transform .5s; }
+  .refresh-btn.spinning svg{ animation:spin 0.8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  /* Location control */
+  .locate-card{
+    background:var(--panel);
+    border:1px solid var(--panel-line);
+    border-radius:20px;
+    padding:20px;
+    text-align:center;
+  }
+  .locate-icon{ font-size:26px; margin-bottom:8px; }
+  .locate-text{ color:var(--muted); font-size:13px; line-height:1.5; margin-bottom:14px; }
+  .btn-primary{
+    background:var(--wind);
+    color:#0A2320;
+    border:none;
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:14px;
+    padding:11px 20px;
+    border-radius:12px;
+    cursor:pointer;
+    width:100%;
+    transition:filter .15s;
+  }
+  .btn-primary:hover{ filter:brightness(1.08); }
+  .btn-primary:disabled{ opacity:0.5; cursor:default; }
+
+  .divider-text{
+    display:flex; align-items:center; gap:10px;
+    color:var(--muted-dim); font-size:11px;
+    margin:14px 0;
+  }
+  .divider-text::before, .divider-text::after{
+    content:""; flex:1; height:1px; background:var(--panel-line);
+  }
+
+  .search-row{ display:flex; gap:8px; }
+  .search-input{
+    flex:1;
+    background:var(--bg-deep-2);
+    border:1px solid var(--panel-line);
+    color:var(--mist);
+    font-family:'Inter', sans-serif;
+    font-size:14px;
+    padding:11px 12px;
+    border-radius:12px;
+    outline:none;
+  }
+  .search-input:focus{ border-color:var(--wind); }
+  .search-btn{
+    background:var(--bg-deep-2);
+    border:1px solid var(--panel-line);
+    color:var(--muted);
+    border-radius:12px;
+    padding:0 14px;
+    cursor:pointer;
+    font-size:14px;
+  }
+  .search-results{
+    margin-top:10px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    text-align:left;
+  }
+  .search-result{
+    background:var(--bg-deep-2);
+    border:1px solid var(--panel-line);
+    border-radius:10px;
+    padding:10px 12px;
+    cursor:pointer;
+    font-size:13px;
+    transition:border-color .15s;
+  }
+  .search-result:hover{ border-color:var(--wind); }
+  .search-result .r-name{ color:var(--mist); font-weight:500; }
+  .search-result .r-region{ color:var(--muted-dim); font-size:11px; margin-top:2px; }
+
+  .error-text{
+    color:var(--danger);
+    font-size:12px;
+    margin-top:10px;
+  }
+
+  .change-location{
+    text-align:center;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:var(--muted-dim);
+    background:none;
+    border:none;
+    text-decoration:underline;
+    cursor:pointer;
+    margin-top:4px;
+  }
+
+  .footer-note{
+    text-align:center;
+    font-size:10px;
+    color:var(--muted-dim);
+    line-height:1.5;
+  }
+
+  @media (max-width:360px){
+    .speed-value{ font-size:44px; }
+  }
+
+  /* Pull-to-refresh */
+  .app-wrap{
+    position:relative;
+    display:flex;
+    justify-content:center;
+    will-change:transform;
+  }
+  .pull-indicator{
+    position:absolute;
+    top:-46px;
+    left:50%;
+    transform:translateX(-50%);
+    width:34px; height:34px;
+    border-radius:50%;
+    background:var(--panel);
+    border:1px solid var(--panel-line);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    opacity:0;
+    z-index:10;
+    box-shadow:0 4px 14px rgba(0,0,0,0.3);
+  }
+  .pull-indicator svg{
+    width:16px; height:16px;
+    stroke:var(--wind);
+    transition:transform .2s ease;
+  }
+  .pull-indicator.ready svg{ transform:rotate(180deg); }
+  .pull-indicator.spinning svg{ animation:spin 0.8s linear infinite; }
+</style>
+</head>
+<body>
+
+<div class="app-wrap" id="appWrap">
+  <div class="pull-indicator" id="pullIndicator">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+  </div>
+<div class="app">
+
+  <div>
+    <div class="eyebrow"><span class="pulse-dot" id="pulseDot"></span><span id="statusText">Verbinde…</span></div>
+    <h1>Windmesser</h1>
+    <div class="location-line">
+      <div class="location-name" id="locationName">—</div>
+      <div class="coords" id="coordsText"></div>
+    </div>
+  </div>
+
+  <div class="error-text" id="errorText" style="display:none;"></div>
+
+  <!-- Locate card: shown until we have a location -->
+  <div class="locate-card" id="locateCard">
+    <div class="locate-icon">📍</div>
+    <div class="locate-text">Erlaube den Standortzugriff, um die aktuelle Windgeschwindigkeit an deinem Handystandort anzuzeigen.</div>
+    <button class="btn-primary" id="btnLocate">Standort verwenden</button>
+    <div class="divider-text">oder Ort suchen</div>
+    <div class="search-row">
+      <input class="search-input" id="searchInput" placeholder="Stadt oder Ort eingeben…" />
+      <button class="search-btn" id="searchBtn">Suchen</button>
+    </div>
+    <div class="search-results" id="searchResults"></div>
+  </div>
+
+  <!-- Data panel: shown once we have data -->
+  <div class="panel" id="dataPanel" style="display:none;">
+    <div class="dial-wrap">
+      <svg class="dial" viewBox="0 0 300 300">
+        <!-- tick marks -->
+        <g id="ticks"></g>
+        <!-- flowing wind ring -->
+        <circle class="flow-ring" id="flowRing" cx="150" cy="150" r="128"
+          stroke-dasharray="4 14" />
+        <!-- cardinal labels -->
+        <g id="cardinals"></g>
+        <!-- needle -->
+        <g class="needle" id="needle">
+          <line class="needle-line" x1="150" y1="150" x2="150" y2="46"/>
+          <polygon class="needle-tip" points="150,36 143,54 157,54"/>
+        </g>
+        <circle class="hub" cx="150" cy="150" r="7"/>
+      </svg>
+      <div class="readout">
+        <div class="speed-value" id="speedValue">--</div>
+        <button class="unit-toggle" id="unitToggle">kn ⇄</button>
+      </div>
+    </div>
+
+    <div class="beaufort">
+      <div class="beaufort-name" id="beaufortName">—</div>
+      <div class="beaufort-scale" id="beaufortScale"></div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Böen</div>
+        <div class="stat-value gust" id="gustValue">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Richtung</div>
+        <div class="stat-value" id="directionValue">—</div>
+      </div>
+    </div>
+
+    <div class="updated-row">
+      <span id="updatedText">—</span>
+      <button class="refresh-btn" id="refreshBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        Aktualisieren
+      </button>
+    </div>
+  </div>
+
+  <button class="change-location" id="changeLocationBtn" style="display:none;">Anderen Ort wählen</button>
+
+  <div class="footer-note">Daten von Open-Meteo · aktualisiert automatisch alle 5 Minuten</div>
+</div>
+</div>
+
+<script>
+(function(){
+  const state = {
+    lat:null, lon:null, placeName:"", placeRegion:"",
+    unit:"kn", // kmh, ms, mph, kn
+    lastData:null,
+    autoTimer:null
+  };
+
+  const el = id => document.getElementById(id);
+  const pulseDot = el('pulseDot');
+  const statusText = el('statusText');
+  const locateCard = el('locateCard');
+  const dataPanel = el('dataPanel');
+  const changeLocationBtn = el('changeLocationBtn');
+  const errorText = el('errorText');
+  const locationName = el('locationName');
+  const coordsText = el('coordsText');
+
+  const UNIT_LABELS = {kmh:"km/h", ms:"m/s", mph:"mph", kn:"kn"};
+  const UNIT_ORDER = ["kn","kmh","ms","mph"];
+  // conversion factors from km/h
+  function fromKmh(v, unit){
+    if(unit==="kmh") return v;
+    if(unit==="ms") return v/3.6;
+    if(unit==="mph") return v/1.60934;
+    if(unit==="kn") return v/1.852;
+  }
+
+  function beaufortFromKmh(v){
+    const table = [
+      [1,"Windstille"],[5,"Leiser Zug"],[11,"Leichte Brise"],[19,"Schwache Brise"],
+      [28,"Mäßige Brise"],[38,"Frische Brise"],[49,"Starker Wind"],[61,"Steifer Wind"],
+      [74,"Stürmischer Wind"],[88,"Sturm"],[102,"Schwerer Sturm"],[117,"Orkanartiger Sturm"],
+      [999,"Orkan"]
+    ];
+    for(let i=0;i<table.length;i++){
+      if(v < table[i][0]) return {level:i, name:table[i][1]};
+    }
+    return {level:12, name:"Orkan"};
+  }
+
+  function directionText(deg){
+    const dirs = ["N","NNO","NO","ONO","O","OSO","SO","SSO","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+    const idx = Math.round(deg/22.5) % 16;
+    return dirs[idx];
+  }
+
+  // Build dial ticks (once)
+  function buildDial(){
+    const ticksG = el('ticks');
+    const cardG = el('cardinals');
+    const cx=150, cy=150, rOuter=128, rInnerMinor=118, rInnerMajor=112;
+    for(let deg=0; deg<360; deg+=10){
+      const major = deg % 30 === 0;
+      const rad = (deg-90) * Math.PI/180;
+      const x1 = cx + rOuter*Math.cos(rad);
+      const y1 = cy + rOuter*Math.sin(rad);
+      const rIn = major ? rInnerMajor : rInnerMinor;
+      const x2 = cx + rIn*Math.cos(rad);
+      const y2 = cy + rIn*Math.sin(rad);
+      const line = document.createElementNS("http://www.w3.org/2000/svg","line");
+      line.setAttribute("x1",x1); line.setAttribute("y1",y1);
+      line.setAttribute("x2",x2); line.setAttribute("y2",y2);
+      line.setAttribute("class", "tick" + (major ? " major":""));
+      ticksG.appendChild(line);
+    }
+    const cardinals = [["N",0],["O",90],["S",180],["W",270]];
+    cardinals.forEach(([label,deg])=>{
+      const rad=(deg-90)*Math.PI/180;
+      const r = 96;
+      const x = cx + r*Math.cos(rad);
+      const y = cy + r*Math.sin(rad) + 4;
+      const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+      t.setAttribute("x",x); t.setAttribute("y",y);
+      t.setAttribute("class","cardinal" + (label==="N" ? " north":""));
+      t.textContent = label;
+      cardG.appendChild(t);
+    });
+  }
+  buildDial();
+
+  function setStatus(text, live){
+    statusText.textContent = text;
+    pulseDot.classList.toggle('off', !live);
+  }
+
+  function showError(msg){
+    errorText.style.display = 'block';
+    errorText.textContent = msg;
+  }
+  function clearError(){
+    errorText.style.display = 'none';
+  }
+
+  // ---- Haptics ----
+  // Uses the native Capacitor Haptics plugin when running inside the
+  // wrapped iOS app; silently no-ops in a plain browser (e.g. CodePen).
+  function haptic(style){
+    try{
+      const H = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics;
+      if(H) H.impact({ style: style || 'Light' });
+    }catch(e){ /* no-op outside native shell */ }
+  }
+
+  // ---- Geolocation ----
+  // Uses the native Capacitor Geolocation plugin when available (proper
+  // iOS permission dialog), falling back to the browser API otherwise.
+  function getPosition(){
+    const G = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation;
+    if(G){
+      return G.getCurrentPosition({ enableHighAccuracy:true, timeout:10000 });
+    }
+    if(!navigator.geolocation){
+      return Promise.reject({ message: "Geolocation wird von diesem Browser nicht unterstützt." });
+    }
+    return new Promise((resolve, reject)=>{
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy:true, timeout:10000 });
+    });
+  }
+
+  el('btnLocate').addEventListener('click', async ()=>{
+    clearError();
+    el('btnLocate').disabled = true;
+    el('btnLocate').textContent = "Suche Standort…";
+    try{
+      const pos = await getPosition();
+      el('btnLocate').disabled = false;
+      el('btnLocate').textContent = "Standort verwenden";
+      setLocation(pos.coords.latitude, pos.coords.longitude, null, null);
+    }catch(err){
+      el('btnLocate').disabled = false;
+      el('btnLocate').textContent = "Standort verwenden";
+      const denied = err && (err.code === 1 || (err.message && /denied/i.test(err.message)));
+      showError(denied
+        ? "Standortzugriff wurde verweigert. Bitte erlaube den Zugriff in den Einstellungen oder nutze die Ortssuche."
+        : "Standort konnte nicht ermittelt werden. Bitte nutze die Ortssuche.");
+    }
+  });
+
+  // ---- Manual search ----
+  async function doSearch(){
+    const q = el('searchInput').value.trim();
+    if(q.length < 2) return;
+    clearError();
+    el('searchResults').innerHTML = "";
+    try{
+      const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=de&format=json`);
+      const json = await res.json();
+      if(!json.results || json.results.length === 0){
+        showError("Kein Ort gefunden. Versuche eine andere Schreibweise.");
+        return;
+      }
+      const container = el('searchResults');
+      json.results.forEach(r=>{
+        const div = document.createElement('div');
+        div.className = 'search-result';
+        const region = [r.admin1, r.country].filter(Boolean).join(", ");
+        div.innerHTML = `<div class="r-name">${r.name}</div><div class="r-region">${region}</div>`;
+        div.addEventListener('click', ()=>{
+          setLocation(r.latitude, r.longitude, r.name, region);
+        });
+        container.appendChild(div);
+      });
+    }catch(e){
+      showError("Suche fehlgeschlagen. Bitte überprüfe deine Verbindung.");
+    }
+  }
+  el('searchBtn').addEventListener('click', doSearch);
+  el('searchInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doSearch(); });
+
+  // ---- Reverse geocode (for GPS-based location) ----
+  async function reverseGeocode(lat, lon){
+    try{
+      const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=de`);
+      const json = await res.json();
+      const name = json.city || json.locality || json.principalSubdivision || "Unbekannter Ort";
+      const region = [json.principalSubdivision, json.countryName].filter(Boolean).join(", ");
+      return {name, region};
+    }catch(e){
+      return {name:"Aktueller Standort", region:""};
+    }
+  }
+
+  async function setLocation(lat, lon, name, region){
+    state.lat = lat; state.lon = lon;
+    haptic('Medium');
+    locateCard.style.display = 'none';
+    dataPanel.style.display = 'block';
+    changeLocationBtn.style.display = 'block';
+    setStatus("Lade Winddaten…", true);
+
+    if(!name){
+      const geo = await reverseGeocode(lat, lon);
+      name = geo.name; region = geo.region;
+    }
+    state.placeName = name;
+    state.placeRegion = region;
+    locationName.innerHTML = `<b>${name}</b>${region ? " · " + region : ""}`;
+    coordsText.textContent = `${lat.toFixed(3)}°, ${lon.toFixed(3)}°`;
+
+    fetchWind();
+    if(state.autoTimer) clearInterval(state.autoTimer);
+    state.autoTimer = setInterval(fetchWind, 5*60*1000);
+  }
+
+  changeLocationBtn.addEventListener('click', ()=>{
+    dataPanel.style.display = 'none';
+    changeLocationBtn.style.display = 'none';
+    locateCard.style.display = 'block';
+    el('searchResults').innerHTML = "";
+    el('searchInput').value = "";
+    clearError();
+    setStatus("Verbinde…", false);
+    if(state.autoTimer) clearInterval(state.autoTimer);
+  });
+
+  // ---- Fetch wind data ----
+  async function fetchWind(){
+    const refreshBtn = el('refreshBtn');
+    refreshBtn.classList.add('spinning');
+    try{
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kmh&timezone=auto`;
+      const res = await fetch(url);
+      const json = await res.json();
+      const c = json.current;
+      state.lastData = c;
+      renderData(c);
+      setStatus("Live", true);
+    }catch(e){
+      setStatus("Verbindung fehlgeschlagen", false);
+      showError("Winddaten konnten nicht geladen werden (" + (e && e.message ? e.message : "unbekannter Fehler") + "). Tippe auf Aktualisieren.");
+    }finally{
+      refreshBtn.classList.remove('spinning');
+    }
+  }
+
+  el('refreshBtn').addEventListener('click', fetchWind);
+
+  el('unitToggle').addEventListener('click', ()=>{
+    const i = UNIT_ORDER.indexOf(state.unit);
+    state.unit = UNIT_ORDER[(i+1) % UNIT_ORDER.length];
+    if(state.lastData) renderData(state.lastData);
+  });
+
+  function renderData(c){
+    const speedKmh = c.wind_speed_10m;
+    const gustKmh = c.wind_gusts_10m;
+    const dir = c.wind_direction_10m;
+
+    const speedDisp = fromKmh(speedKmh, state.unit);
+    const gustDisp = fromKmh(gustKmh, state.unit);
+
+    el('speedValue').textContent = speedDisp.toFixed(state.unit==="ms" ? 1 : 0);
+    el('unitToggle').textContent = UNIT_LABELS[state.unit] + " ⇄";
+    el('gustValue').textContent = gustDisp.toFixed(state.unit==="ms" ? 1 : 0) + " " + UNIT_LABELS[state.unit];
+    el('directionValue').textContent = directionText(dir) + " · " + Math.round(dir) + "°";
+
+    // needle rotation: 0deg = wind FROM north points needle to north etc.
+    // Set via CSS style (not the SVG transform attribute) — mixing the two
+    // causes iOS Safari to miscompute the transform-origin on first update,
+    // making the needle jump away from the dial center.
+    el('needle').style.transform = `rotate(${dir}deg)`;
+
+    const bf = beaufortFromKmh(speedKmh);
+    el('beaufortName').textContent = `Beaufort ${bf.level} — ${bf.name}`;
+
+    const scaleEl = el('beaufortScale');
+    scaleEl.innerHTML = "";
+    for(let i=0;i<12;i++){
+      const seg = document.createElement('div');
+      seg.className = 'beaufort-seg' + (i < bf.level ? ' filled' : '');
+      scaleEl.appendChild(seg);
+    }
+
+    // flow ring animation speed tied to wind speed (faster wind = faster spin)
+    const duration = Math.max(1.5, 30 / Math.max(speedKmh,1));
+    const flowRing = el('flowRing');
+    flowRing.style.animation = `spinRing ${duration}s linear infinite`;
+
+    const now = new Date();
+    el('updatedText').textContent = "Aktualisiert " + now.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+  }
+
+  // keyframes for ring spin injected dynamically
+  const styleSheet = document.createElement('style');
+  styleSheet.textContent = `@keyframes spinRing { to { transform: rotate(360deg); } }`;
+  document.head.appendChild(styleSheet);
+
+  // ---- Pull to refresh ----
+  (function setupPullToRefresh(){
+    const wrap = el('appWrap');
+    const indicator = el('pullIndicator');
+    const threshold = 70;
+    let startY = null, pulling = false, thresholdCrossed = false;
+
+    function onStart(e){
+      if(window.scrollY > 0 || state.lat === null) return;
+      startY = e.touches[0].clientY;
+      pulling = true;
+      thresholdCrossed = false;
+    }
+    function onMove(e){
+      if(!pulling || startY === null) return;
+      const delta = e.touches[0].clientY - startY;
+      if(delta <= 0) return;
+      e.preventDefault();
+      const pull = Math.min(delta * 0.5, 90);
+      wrap.style.transform = `translateY(${pull}px)`;
+      indicator.style.opacity = Math.min(pull / threshold, 1);
+      const ready = pull >= threshold;
+      indicator.classList.toggle('ready', ready);
+      if(ready && !thresholdCrossed){ thresholdCrossed = true; haptic('Light'); }
+      if(!ready && thresholdCrossed){ thresholdCrossed = false; }
+    }
+    function onEnd(){
+      if(!pulling) return;
+      const wasReady = indicator.classList.contains('ready');
+      pulling = false;
+      startY = null;
+      wrap.style.transition = 'transform .25s ease';
+      wrap.style.transform = 'translateY(0)';
+      setTimeout(()=>{ wrap.style.transition = ''; }, 250);
+      if(wasReady){
+        indicator.classList.add('spinning');
+        indicator.style.opacity = '1';
+        haptic('Medium');
+        fetchWind().finally(()=>{
+          setTimeout(()=>{
+            indicator.classList.remove('spinning','ready');
+            indicator.style.opacity = '0';
+          }, 250);
+        });
+      }else{
+        indicator.style.opacity = '0';
+        indicator.classList.remove('ready');
+      }
+    }
+    wrap.addEventListener('touchstart', onStart, { passive:true });
+    wrap.addEventListener('touchmove', onMove, { passive:false });
+    wrap.addEventListener('touchend', onEnd);
+    wrap.addEventListener('touchcancel', onEnd);
+  })();
+
+  setStatus("Bereit", false);
+})();
+</script>
+
+</body>
+</html>
