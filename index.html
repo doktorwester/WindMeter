@@ -120,11 +120,12 @@
     aspect-ratio:1/1;
   }
   svg.dial{ width:100%; height:100%; overflow:visible; }
-  .tick{ stroke:var(--panel-line); stroke-width:1.5; }
-  .tick.major{ stroke:var(--muted-dim); stroke-width:2; }
+  .tick{ stroke:var(--panel-line); stroke-width:2; }
+  .tick.major{ stroke:var(--muted-dim); stroke-width:2.5; }
   .cardinal{
     font-family:'JetBrains Mono', monospace;
-    font-size:11px;
+    font-size:17px;
+    font-weight:600;
     fill:var(--muted);
     text-anchor:middle;
   }
@@ -202,9 +203,9 @@
     width:14px; height:5px;
     border-radius:2px;
     background:var(--panel-line);
+    transition:background-color .3s ease;
   }
-  .beaufort-seg.filled{ background:var(--wind); }
-  .beaufort-seg.gust-filled{ background:var(--gust); }
+  .beaufort-seg.filled{ box-shadow:0 0 6px rgba(255,255,255,0.15); }
 
   /* Stats row */
   .stats{
@@ -396,6 +397,72 @@
   }
   .pull-indicator.ready svg{ transform:rotate(180deg); }
   .pull-indicator.spinning svg{ animation:spin 0.8s linear infinite; }
+
+  /* Swipeable panels */
+  .swipe-container{ position:relative; }
+  .swipe-track{
+    display:flex;
+    overflow-x:auto;
+    scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+    gap:10px;
+    margin:0 -4px;
+    padding:0 4px;
+  }
+  .swipe-track::-webkit-scrollbar{ display:none; }
+  .swipe-track .panel{
+    flex:0 0 100%;
+    scroll-snap-align:center;
+    width:100%;
+  }
+  .page-dots{
+    display:flex;
+    justify-content:center;
+    gap:6px;
+    margin-top:12px;
+  }
+  .page-dots .dot{
+    width:6px; height:6px;
+    border-radius:50%;
+    background:var(--panel-line);
+    transition:background-color .2s ease, transform .2s ease;
+  }
+  .page-dots .dot.active{
+    background:var(--wind);
+    transform:scale(1.3);
+  }
+  .panel-title{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:15px;
+    font-weight:600;
+    color:var(--mist);
+    margin-bottom:14px;
+  }
+  .extra-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+  }
+  .marine-section{
+    margin-top:18px;
+    padding-top:16px;
+    border-top:1px solid var(--panel-line);
+  }
+  .marine-title{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:14px;
+    font-weight:500;
+    color:var(--muted);
+    margin-bottom:10px;
+  }
+  .panel-hint{
+    text-align:center;
+    font-family:'JetBrains Mono', monospace;
+    font-size:10px;
+    color:var(--muted-dim);
+    margin-top:16px;
+  }
 </style>
 </head>
 <body>
@@ -430,52 +497,108 @@
     <div class="search-results" id="searchResults"></div>
   </div>
 
-  <!-- Data panel: shown once we have data -->
-  <div class="panel" id="dataPanel" style="display:none;">
-    <div class="dial-wrap">
-      <svg class="dial" viewBox="0 0 300 300">
-        <!-- tick marks -->
-        <g id="ticks"></g>
-        <!-- flowing wind ring -->
-        <circle class="flow-ring" id="flowRing" cx="150" cy="150" r="128"
-          stroke-dasharray="4 14" />
-        <!-- cardinal labels -->
-        <g id="cardinals"></g>
-        <!-- needle -->
-        <g class="needle" id="needle">
-          <line class="needle-line" x1="150" y1="150" x2="150" y2="46"/>
-          <polygon class="needle-tip" points="150,36 143,54 157,54"/>
-        </g>
-        <circle class="hub" cx="150" cy="150" r="7"/>
-      </svg>
-      <div class="readout">
-        <div class="speed-value" id="speedValue">--</div>
-        <button class="unit-toggle" id="unitToggle">kn ⇄</button>
-      </div>
-    </div>
+  <!-- Data panels: shown once we have data. Swipe horizontally between them. -->
+  <div class="swipe-container" id="swipeContainer" style="display:none;">
+    <div class="swipe-track" id="swipeTrack">
 
-    <div class="beaufort">
-      <div class="beaufort-name" id="beaufortName">—</div>
-      <div class="beaufort-scale" id="beaufortScale"></div>
-    </div>
+      <div class="panel" id="dataPanel">
+        <div class="dial-wrap">
+          <svg class="dial" viewBox="0 0 300 300">
+            <!-- tick marks -->
+            <g id="ticks"></g>
+            <!-- flowing wind ring -->
+            <circle class="flow-ring" id="flowRing" cx="150" cy="150" r="128"
+              stroke-dasharray="4 14" />
+            <!-- cardinal labels -->
+            <g id="cardinals"></g>
+            <!-- needle -->
+            <g class="needle" id="needle">
+              <line class="needle-line" x1="150" y1="150" x2="150" y2="46"/>
+              <polygon class="needle-tip" points="150,36 143,54 157,54"/>
+            </g>
+            <circle class="hub" cx="150" cy="150" r="7"/>
+          </svg>
+          <div class="readout">
+            <div class="speed-value" id="speedValue">--</div>
+            <button class="unit-toggle" id="unitToggle">kn ⇄</button>
+          </div>
+        </div>
 
-    <div class="stats">
-      <div class="stat">
-        <div class="stat-label">Böen</div>
-        <div class="stat-value gust" id="gustValue">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Richtung</div>
-        <div class="stat-value" id="directionValue">—</div>
-      </div>
-    </div>
+        <div class="beaufort">
+          <div class="beaufort-name" id="beaufortName">—</div>
+          <div class="beaufort-scale" id="beaufortScale"></div>
+        </div>
 
-    <div class="updated-row">
-      <span id="updatedText">—</span>
-      <button class="refresh-btn" id="refreshBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-        Aktualisieren
-      </button>
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Böen</div>
+            <div class="stat-value gust" id="gustValue">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Richtung</div>
+            <div class="stat-value" id="directionValue">—</div>
+          </div>
+        </div>
+
+        <div class="updated-row">
+          <span id="updatedText">—</span>
+          <button class="refresh-btn" id="refreshBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            Aktualisieren
+          </button>
+        </div>
+      </div>
+
+      <div class="panel panel-secondary" id="panelSecondary">
+        <div class="panel-title">Weitere Daten</div>
+        <div class="extra-grid">
+          <div class="stat">
+            <div class="stat-label">Temperatur</div>
+            <div class="stat-value" id="tempValue">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Gefühlt</div>
+            <div class="stat-value" id="feelsValue">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Luftfeuchte</div>
+            <div class="stat-value" id="humidityValue">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Luftdruck</div>
+            <div class="stat-value" id="pressureValue">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Bewölkung</div>
+            <div class="stat-value" id="cloudValue">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Böigkeit</div>
+            <div class="stat-value" id="gustFactorValue">—</div>
+          </div>
+        </div>
+
+        <div class="marine-section" id="marineSection" style="display:none;">
+          <div class="marine-title">🌊 Seegang</div>
+          <div class="extra-grid">
+            <div class="stat">
+              <div class="stat-label">Wellenhöhe</div>
+              <div class="stat-value" id="waveHeightValue">—</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Wellenperiode</div>
+              <div class="stat-value" id="wavePeriodValue">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-hint">Für Seegang- und weitere Landdaten nach links wischen</div>
+      </div>
+
+    </div>
+    <div class="page-dots" id="pageDots">
+      <span class="dot active"></span>
+      <span class="dot"></span>
     </div>
   </div>
 
@@ -498,13 +621,31 @@
   const pulseDot = el('pulseDot');
   const statusText = el('statusText');
   const locateCard = el('locateCard');
-  const dataPanel = el('dataPanel');
+  const swipeContainer = el('swipeContainer');
   const changeLocationBtn = el('changeLocationBtn');
   const errorText = el('errorText');
   const locationName = el('locationName');
   const coordsText = el('coordsText');
 
   const UNIT_LABELS = {kmh:"km/h", ms:"m/s", mph:"mph", kn:"kn"};
+  // Beaufort 0–12 color ramp, following the convention used in wind/weather
+  // diagrams: calm blues/teals through green, yellow, orange, red, up to
+  // magenta/purple for the most extreme wind strengths.
+  const BEAUFORT_COLORS = [
+    "#3B82C4", // 0 Windstille
+    "#4FD1C5", // 1 Leiser Zug
+    "#4FE0B8", // 2 Leichte Brise
+    "#6FE08C", // 3 Schwache Brise
+    "#9BE05A", // 4 Mäßige Brise
+    "#C9DE4E", // 5 Frische Brise
+    "#F2D24C", // 6 Starker Wind
+    "#F2A83E", // 7 Steifer Wind
+    "#F2843E", // 8 Stürmischer Wind
+    "#E85F42", // 9 Sturm
+    "#D93A4C", // 10 Schwerer Sturm
+    "#C22F7A", // 11 Orkanartiger Sturm
+    "#9B2FC2"  // 12 Orkan
+  ];
   const UNIT_ORDER = ["kn","kmh","ms","mph"];
   // conversion factors from km/h
   function fromKmh(v, unit){
@@ -537,9 +678,12 @@
   function buildDial(){
     const ticksG = el('ticks');
     const cardG = el('cardinals');
-    const cx=150, cy=150, rOuter=128, rInnerMinor=118, rInnerMajor=112;
-    for(let deg=0; deg<360; deg+=10){
-      const major = deg % 30 === 0;
+    const cx=150, cy=150, rOuter=128, rInnerMinor=120, rInnerMajor=110;
+    // Ticks only at the 4 cardinal points (N/O/S/W, longer) and the 4
+    // intercardinal points NO/SO/SW/NW (shorter) — not a dense clock face.
+    const tickDegrees = [0,45,90,135,180,225,270,315];
+    tickDegrees.forEach(deg=>{
+      const major = deg % 90 === 0;
       const rad = (deg-90) * Math.PI/180;
       const x1 = cx + rOuter*Math.cos(rad);
       const y1 = cy + rOuter*Math.sin(rad);
@@ -551,13 +695,13 @@
       line.setAttribute("x2",x2); line.setAttribute("y2",y2);
       line.setAttribute("class", "tick" + (major ? " major":""));
       ticksG.appendChild(line);
-    }
+    });
     const cardinals = [["N",0],["O",90],["S",180],["W",270]];
     cardinals.forEach(([label,deg])=>{
       const rad=(deg-90)*Math.PI/180;
-      const r = 96;
+      const r = 94;
       const x = cx + r*Math.cos(rad);
-      const y = cy + r*Math.sin(rad) + 4;
+      const y = cy + r*Math.sin(rad) + 5;
       const t = document.createElementNS("http://www.w3.org/2000/svg","text");
       t.setAttribute("x",x); t.setAttribute("y",y);
       t.setAttribute("class","cardinal" + (label==="N" ? " north":""));
@@ -673,7 +817,7 @@
     state.lat = lat; state.lon = lon;
     haptic('Medium');
     locateCard.style.display = 'none';
-    dataPanel.style.display = 'block';
+    swipeContainer.style.display = 'block';
     changeLocationBtn.style.display = 'block';
     setStatus("Lade Winddaten…", true);
 
@@ -687,12 +831,13 @@
     coordsText.textContent = `${lat.toFixed(3)}°, ${lon.toFixed(3)}°`;
 
     fetchWind();
+    fetchMarine();
     if(state.autoTimer) clearInterval(state.autoTimer);
-    state.autoTimer = setInterval(fetchWind, 5*60*1000);
+    state.autoTimer = setInterval(()=>{ fetchWind(); fetchMarine(); }, 5*60*1000);
   }
 
   changeLocationBtn.addEventListener('click', ()=>{
-    dataPanel.style.display = 'none';
+    swipeContainer.style.display = 'none';
     changeLocationBtn.style.display = 'none';
     locateCard.style.display = 'block';
     el('searchResults').innerHTML = "";
@@ -707,7 +852,7 @@
     const refreshBtn = el('refreshBtn');
     refreshBtn.classList.add('spinning');
     try{
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kmh&timezone=auto`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,apparent_temperature,relative_humidity_2m,pressure_msl,cloud_cover,precipitation&wind_speed_unit=kmh&timezone=auto`;
       const res = await fetch(url);
       const json = await res.json();
       const c = json.current;
@@ -756,9 +901,12 @@
     scaleEl.innerHTML = "";
     for(let i=0;i<12;i++){
       const seg = document.createElement('div');
-      seg.className = 'beaufort-seg' + (i < bf.level ? ' filled' : '');
+      const filled = i < bf.level;
+      seg.className = 'beaufort-seg' + (filled ? ' filled' : '');
+      if(filled) seg.style.background = BEAUFORT_COLORS[i+1];
       scaleEl.appendChild(seg);
     }
+    el('beaufortName').style.color = BEAUFORT_COLORS[bf.level];
 
     // flow ring animation speed tied to wind speed (faster wind = faster spin)
     const duration = Math.max(1.5, 30 / Math.max(speedKmh,1));
@@ -767,6 +915,45 @@
 
     const now = new Date();
     el('updatedText').textContent = "Aktualisiert " + now.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+
+    // ---- Secondary panel: additional weather data ----
+    if(c.temperature_2m != null) el('tempValue').textContent = Math.round(c.temperature_2m) + " °C";
+    if(c.apparent_temperature != null) el('feelsValue').textContent = Math.round(c.apparent_temperature) + " °C";
+    if(c.relative_humidity_2m != null) el('humidityValue').textContent = Math.round(c.relative_humidity_2m) + " %";
+    if(c.pressure_msl != null) el('pressureValue').textContent = Math.round(c.pressure_msl) + " hPa";
+    if(c.cloud_cover != null) el('cloudValue').textContent = Math.round(c.cloud_cover) + " %";
+
+    // Böigkeit (gust factor): ratio of gust to mean wind speed — a standard
+    // measure of how turbulent/choppy the wind currently is, since forecast
+    // APIs don't model an actual "gusts per minute" count.
+    if(speedKmh > 1){
+      const factor = gustKmh / speedKmh;
+      el('gustFactorValue').textContent = factor.toFixed(1) + "×";
+    } else {
+      el('gustFactorValue').textContent = "—";
+    }
+  }
+
+  async function fetchMarine(){
+    const marineSection = el('marineSection');
+    try{
+      const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${state.lat}&longitude=${state.lon}&current=wave_height,wave_period&timezone=auto`;
+      const res = await fetch(url);
+      if(!res.ok){ marineSection.style.display = 'none'; return; }
+      const json = await res.json();
+      const m = json.current;
+      // Inland locations return null values rather than an error — hide
+      // the section unless we actually have usable marine data.
+      if(!m || m.wave_height == null){
+        marineSection.style.display = 'none';
+        return;
+      }
+      el('waveHeightValue').textContent = m.wave_height.toFixed(1) + " m";
+      el('wavePeriodValue').textContent = (m.wave_period != null ? m.wave_period.toFixed(1) + " s" : "—");
+      marineSection.style.display = 'block';
+    }catch(e){
+      marineSection.style.display = 'none';
+    }
   }
 
   // keyframes for ring spin injected dynamically
@@ -779,20 +966,30 @@
     const wrap = el('appWrap');
     const indicator = el('pullIndicator');
     const threshold = 70;
-    let startY = null, pulling = false, thresholdCrossed = false;
+    let startX = null, startY = null, pulling = false, thresholdCrossed = false, horizontalGesture = false;
 
     function onStart(e){
       if(window.scrollY > 0 || state.lat === null) return;
+      startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       pulling = true;
       thresholdCrossed = false;
+      horizontalGesture = false;
     }
     function onMove(e){
       if(!pulling || startY === null) return;
-      const delta = e.touches[0].clientY - startY;
-      if(delta <= 0) return;
+      const deltaX = e.touches[0].clientX - startX;
+      const deltaY = e.touches[0].clientY - startY;
+      // If the gesture turns out to be mostly horizontal, treat it as a
+      // panel swipe instead — bail out and let native scrolling handle it.
+      if(!horizontalGesture && Math.abs(deltaX) > 8 && Math.abs(deltaX) > Math.abs(deltaY)){
+        horizontalGesture = true;
+        pulling = false;
+        return;
+      }
+      if(horizontalGesture || deltaY <= 0) return;
       e.preventDefault();
-      const pull = Math.min(delta * 0.5, 90);
+      const pull = Math.min(deltaY * 0.5, 90);
       wrap.style.transform = `translateY(${pull}px)`;
       indicator.style.opacity = Math.min(pull / threshold, 1);
       const ready = pull >= threshold;
@@ -801,10 +998,13 @@
       if(!ready && thresholdCrossed){ thresholdCrossed = false; }
     }
     function onEnd(){
-      if(!pulling) return;
+      if(horizontalGesture){
+        startX = null; startY = null; horizontalGesture = false;
+        return;
+      }
       const wasReady = indicator.classList.contains('ready');
       pulling = false;
-      startY = null;
+      startX = null; startY = null;
       wrap.style.transition = 'transform .25s ease';
       wrap.style.transform = 'translateY(0)';
       setTimeout(()=>{ wrap.style.transition = ''; }, 250);
@@ -812,7 +1012,7 @@
         indicator.classList.add('spinning');
         indicator.style.opacity = '1';
         haptic('Medium');
-        fetchWind().finally(()=>{
+        Promise.all([fetchWind(), fetchMarine()]).finally(()=>{
           setTimeout(()=>{
             indicator.classList.remove('spinning','ready');
             indicator.style.opacity = '0';
@@ -827,6 +1027,16 @@
     wrap.addEventListener('touchmove', onMove, { passive:false });
     wrap.addEventListener('touchend', onEnd);
     wrap.addEventListener('touchcancel', onEnd);
+  })();
+
+  // ---- Page dots for the swipeable panels ----
+  (function setupPageDots(){
+    const track = el('swipeTrack');
+    const dots = Array.from(document.querySelectorAll('#pageDots .dot'));
+    track.addEventListener('scroll', ()=>{
+      const page = Math.round(track.scrollLeft / track.clientWidth);
+      dots.forEach((d,i)=> d.classList.toggle('active', i === page));
+    }, { passive:true });
   })();
 
   setStatus("Bereit", false);
