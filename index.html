@@ -25,7 +25,7 @@
     --danger:#E8735A;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
-  html,body{min-height:100%;}
+  html,body{min-height:100%; overflow-x:hidden;}
   html{ -webkit-overflow-scrolling:touch; }
   body{ overflow-y:auto; }
   body{
@@ -130,6 +130,7 @@
     text-anchor:middle;
   }
   .cardinal.north{ fill:var(--wind); font-weight:700; }
+  .cardinal.intercardinal{ font-size:11px; font-weight:500; fill:var(--muted-dim); }
   .flow-ring{
     fill:none;
     stroke:var(--wind);
@@ -399,7 +400,7 @@
   .pull-indicator.spinning svg{ animation:spin 0.8s linear infinite; }
 
   /* Swipeable panels */
-  .swipe-container{ position:relative; }
+  .swipe-container{ position:relative; width:100%; }
   .swipe-track{
     display:flex;
     overflow-x:auto;
@@ -407,14 +408,14 @@
     -webkit-overflow-scrolling:touch;
     scrollbar-width:none;
     gap:10px;
-    margin:0 -4px;
-    padding:0 4px;
+    width:100%;
   }
   .swipe-track::-webkit-scrollbar{ display:none; }
   .swipe-track .panel{
     flex:0 0 100%;
     scroll-snap-align:center;
     width:100%;
+    min-width:0;
   }
   .page-dots{
     display:flex;
@@ -513,8 +514,8 @@
             <g id="cardinals"></g>
             <!-- needle -->
             <g class="needle" id="needle">
-              <line class="needle-line" x1="150" y1="150" x2="150" y2="46"/>
-              <polygon class="needle-tip" points="150,36 143,54 157,54"/>
+              <line class="needle-line" id="needleLine" x1="150" y1="150" x2="150" y2="46"/>
+              <polygon class="needle-tip" id="needleTip" points="150,36 143,54 157,54"/>
             </g>
             <circle class="hub" cx="150" cy="150" r="7"/>
           </svg>
@@ -547,6 +548,8 @@
             Aktualisieren
           </button>
         </div>
+
+        <div class="panel-hint">Für weitere Daten nach links wischen</div>
       </div>
 
       <div class="panel panel-secondary" id="panelSecondary">
@@ -591,8 +594,6 @@
             </div>
           </div>
         </div>
-
-        <div class="panel-hint">Für Seegang- und weitere Landdaten nach links wischen</div>
       </div>
 
     </div>
@@ -705,6 +706,18 @@
       const t = document.createElementNS("http://www.w3.org/2000/svg","text");
       t.setAttribute("x",x); t.setAttribute("y",y);
       t.setAttribute("class","cardinal" + (label==="N" ? " north":""));
+      t.textContent = label;
+      cardG.appendChild(t);
+    });
+    const intercardinals = [["NO",45],["SO",135],["SW",225],["NW",315]];
+    intercardinals.forEach(([label,deg])=>{
+      const rad=(deg-90)*Math.PI/180;
+      const r = 97;
+      const x = cx + r*Math.cos(rad);
+      const y = cy + r*Math.sin(rad) + 4;
+      const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+      t.setAttribute("x",x); t.setAttribute("y",y);
+      t.setAttribute("class","cardinal intercardinal");
       t.textContent = label;
       cardG.appendChild(t);
     });
@@ -907,6 +920,9 @@
       scaleEl.appendChild(seg);
     }
     el('beaufortName').style.color = BEAUFORT_COLORS[bf.level];
+    const needleColor = BEAUFORT_COLORS[bf.level];
+    el('needleLine').style.stroke = needleColor;
+    el('needleTip').style.fill = needleColor;
 
     // flow ring animation speed tied to wind speed (faster wind = faster spin)
     const duration = Math.max(1.5, 30 / Math.max(speedKmh,1));
