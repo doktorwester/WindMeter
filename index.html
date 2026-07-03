@@ -25,7 +25,9 @@
     --danger:#E8735A;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
-  html,body{height:100%;}
+  html,body{min-height:100%;}
+  html{ -webkit-overflow-scrolling:touch; }
+  body{ overflow-y:auto; }
   body{
     background:
       radial-gradient(ellipse 80% 50% at 50% -10%, rgba(79,209,197,0.08), transparent),
