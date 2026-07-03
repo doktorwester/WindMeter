@@ -43,9 +43,11 @@
   .app{
     width:100%;
     max-width:420px;
+    min-width:0;
     display:flex;
     flex-direction:column;
     gap:18px;
+    overflow-x:hidden;
   }
 
   /* Header */
@@ -87,6 +89,8 @@
   .location-name{
     font-size:14px;
     color:var(--muted);
+    overflow-wrap:anywhere;
+    min-width:0;
   }
   .location-name b{ color:var(--mist); font-weight:500; }
   .coords{
@@ -119,8 +123,9 @@
     margin:6px auto 4px;
     aspect-ratio:1/1;
   }
-  svg.dial{ width:100%; height:100%; overflow:visible; }
-  .tick{ stroke:var(--panel-line); stroke-width:2; }
+  svg.dial{ width:100%; height:100%; display:block; }
+  .tick{ stroke:var(--panel-line); stroke-width:1.25; }
+  .tick.medium{ stroke:var(--panel-line); stroke-width:1.75; opacity:0.9; }
   .tick.major{ stroke:var(--muted-dim); stroke-width:2.5; }
   .cardinal{
     font-family:'JetBrains Mono', monospace;
@@ -374,6 +379,8 @@
     display:flex;
     justify-content:center;
     will-change:transform;
+    width:100%;
+    min-width:0;
   }
   .pull-indicator{
     position:absolute;
@@ -679,24 +686,26 @@
   function buildDial(){
     const ticksG = el('ticks');
     const cardG = el('cardinals');
-    const cx=150, cy=150, rOuter=128, rInnerMinor=120, rInnerMajor=110;
-    // Ticks only at the 4 cardinal points (N/O/S/W, longer) and the 4
-    // intercardinal points NO/SO/SW/NW (shorter) — not a dense clock face.
-    const tickDegrees = [0,45,90,135,180,225,270,315];
-    tickDegrees.forEach(deg=>{
-      const major = deg % 90 === 0;
+    const cx=150, cy=150, rOuter=128;
+    const rInnerMajor=108, rInnerMedium=116, rInnerMinor=123;
+    // Three tiers: fine 10° ticks all the way round, a slightly longer/
+    // brighter tick at each intercardinal (NO/SO/SW/NW), and the longest,
+    // brightest ticks at the cardinals (N/O/S/W), which also carry labels.
+    for(let deg=0; deg<360; deg+=10){
+      const isMajor = deg % 90 === 0;
+      const isMedium = !isMajor && deg % 45 === 0;
       const rad = (deg-90) * Math.PI/180;
       const x1 = cx + rOuter*Math.cos(rad);
       const y1 = cy + rOuter*Math.sin(rad);
-      const rIn = major ? rInnerMajor : rInnerMinor;
+      const rIn = isMajor ? rInnerMajor : (isMedium ? rInnerMedium : rInnerMinor);
       const x2 = cx + rIn*Math.cos(rad);
       const y2 = cy + rIn*Math.sin(rad);
       const line = document.createElementNS("http://www.w3.org/2000/svg","line");
       line.setAttribute("x1",x1); line.setAttribute("y1",y1);
       line.setAttribute("x2",x2); line.setAttribute("y2",y2);
-      line.setAttribute("class", "tick" + (major ? " major":""));
+      line.setAttribute("class", "tick" + (isMajor ? " major" : isMedium ? " medium" : ""));
       ticksG.appendChild(line);
-    });
+    }
     const cardinals = [["N",0],["O",90],["S",180],["W",270]];
     cardinals.forEach(([label,deg])=>{
       const rad=(deg-90)*Math.PI/180;
