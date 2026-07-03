@@ -136,14 +136,6 @@
   }
   .cardinal.north{ fill:var(--wind); font-weight:700; }
   .cardinal.intercardinal{ font-size:11px; font-weight:500; fill:var(--muted-dim); }
-  .flow-ring{
-    fill:none;
-    stroke:var(--wind);
-    stroke-width:2;
-    stroke-linecap:round;
-    opacity:0.55;
-    transform-origin:50% 50%;
-  }
   .needle{
     transform-origin:150px 150px;
     transition:transform 0.9s cubic-bezier(.34,1.56,.64,1);
@@ -514,9 +506,6 @@
           <svg class="dial" viewBox="0 0 300 300">
             <!-- tick marks -->
             <g id="ticks"></g>
-            <!-- flowing wind ring -->
-            <circle class="flow-ring" id="flowRing" cx="150" cy="150" r="128"
-              stroke-dasharray="4 14" />
             <!-- cardinal labels -->
             <g id="cardinals"></g>
             <!-- needle -->
@@ -636,23 +625,24 @@
   const coordsText = el('coordsText');
 
   const UNIT_LABELS = {kmh:"km/h", ms:"m/s", mph:"mph", kn:"kn"};
-  // Beaufort 0–12 color ramp, following the convention used in wind/weather
-  // diagrams: calm blues/teals through green, yellow, orange, red, up to
-  // magenta/purple for the most extreme wind strengths.
+  // Beaufort 0–12 color ramp. Hues are spread widely around the color wheel
+  // (not just brightness steps of one hue) so neighboring strengths stay
+  // clearly distinguishable at a glance, from calm blue through the
+  // spectrum to violent-storm magenta/purple.
   const BEAUFORT_COLORS = [
-    "#3B82C4", // 0 Windstille
-    "#4FD1C5", // 1 Leiser Zug
-    "#4FE0B8", // 2 Leichte Brise
-    "#6FE08C", // 3 Schwache Brise
-    "#9BE05A", // 4 Mäßige Brise
-    "#C9DE4E", // 5 Frische Brise
-    "#F2D24C", // 6 Starker Wind
-    "#F2A83E", // 7 Steifer Wind
-    "#F2843E", // 8 Stürmischer Wind
-    "#E85F42", // 9 Sturm
-    "#D93A4C", // 10 Schwerer Sturm
-    "#C22F7A", // 11 Orkanartiger Sturm
-    "#9B2FC2"  // 12 Orkan
+    "hsl(210,70%,58%)", // 0 Windstille — blue
+    "hsl(195,75%,52%)", // 1 Leiser Zug — cyan-blue
+    "hsl(175,70%,46%)", // 2 Leichte Brise — teal
+    "hsl(155,62%,46%)", // 3 Schwache Brise — green-teal
+    "hsl(135,58%,48%)", // 4 Mäßige Brise — green
+    "hsl(100,55%,50%)", // 5 Frische Brise — yellow-green
+    "hsl(75,65%,50%)",  // 6 Starker Wind — chartreuse
+    "hsl(50,90%,55%)",  // 7 Steifer Wind — yellow
+    "hsl(35,90%,54%)",  // 8 Stürmischer Wind — amber
+    "hsl(20,85%,55%)",  // 9 Sturm — orange-red
+    "hsl(0,75%,56%)",   // 10 Schwerer Sturm — red
+    "hsl(335,70%,55%)", // 11 Orkanartiger Sturm — crimson/pink
+    "hsl(285,60%,60%)"  // 12 Orkan — purple
   ];
   const UNIT_ORDER = ["kn","kmh","ms","mph"];
   // conversion factors from km/h
@@ -908,6 +898,7 @@
     el('speedValue').textContent = speedDisp.toFixed(state.unit==="ms" ? 1 : 0);
     el('unitToggle').textContent = UNIT_LABELS[state.unit] + " ⇄";
     el('gustValue').textContent = gustDisp.toFixed(state.unit==="ms" ? 1 : 0) + " " + UNIT_LABELS[state.unit];
+    el('gustValue').style.color = BEAUFORT_COLORS[beaufortFromKmh(gustKmh).level];
     el('directionValue').textContent = directionText(dir) + " · " + Math.round(dir) + "°";
 
     // needle rotation: 0deg = wind FROM north points needle to north etc.
@@ -932,11 +923,6 @@
     const needleColor = BEAUFORT_COLORS[bf.level];
     el('needleLine').style.stroke = needleColor;
     el('needleTip').style.fill = needleColor;
-
-    // flow ring animation speed tied to wind speed (faster wind = faster spin)
-    const duration = Math.max(1.5, 30 / Math.max(speedKmh,1));
-    const flowRing = el('flowRing');
-    flowRing.style.animation = `spinRing ${duration}s linear infinite`;
 
     const now = new Date();
     el('updatedText').textContent = "Aktualisiert " + now.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
@@ -980,11 +966,6 @@
       marineSection.style.display = 'none';
     }
   }
-
-  // keyframes for ring spin injected dynamically
-  const styleSheet = document.createElement('style');
-  styleSheet.textContent = `@keyframes spinRing { to { transform: rotate(360deg); } }`;
-  document.head.appendChild(styleSheet);
 
   // ---- Pull to refresh ----
   (function setupPullToRefresh(){
