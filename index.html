@@ -124,9 +124,9 @@
     aspect-ratio:1/1;
   }
   svg.dial{ width:100%; height:100%; display:block; }
-  .tick{ stroke:var(--panel-line); stroke-width:1.25; }
-  .tick.medium{ stroke:var(--panel-line); stroke-width:1.75; opacity:0.9; }
-  .tick.major{ stroke:var(--muted-dim); stroke-width:2.5; }
+  .tick{ stroke:var(--muted-dim); stroke-width:1.25; opacity:0.7; }
+  .tick.medium{ stroke:var(--muted); stroke-width:1.85; opacity:0.9; }
+  .tick.major{ stroke:var(--mist); stroke-width:2.5; opacity:0.9; }
   .cardinal{
     font-family:'JetBrains Mono', monospace;
     font-size:17px;
@@ -134,7 +134,7 @@
     fill:var(--muted);
     text-anchor:middle;
   }
-  .cardinal.north{ fill:var(--wind); font-weight:700; }
+  .cardinal.north{ fill:var(--muted); font-weight:700; }
   .cardinal.intercardinal{ font-size:11px; font-weight:500; fill:var(--muted-dim); }
   .needle{
     transform-origin:150px 150px;
@@ -146,7 +146,7 @@
 
   .readout{
     position:absolute;
-    top:50%; left:50%;
+    top:58%; left:50%;
     transform:translate(-50%,-50%);
     text-align:center;
     pointer-events:none;
@@ -463,6 +463,41 @@
     color:var(--muted-dim);
     margin-top:16px;
   }
+
+  /* 48h meteogram */
+  .chart-legend{
+    display:flex;
+    justify-content:center;
+    gap:18px;
+    margin-bottom:14px;
+  }
+  .legend-item{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:var(--muted);
+  }
+  .legend-swatch{
+    width:10px; height:10px;
+    border-radius:50%;
+    display:inline-block;
+  }
+  .legend-swatch.speed{ background:var(--wind); }
+  .legend-swatch.gust{ background:var(--gust); }
+  .chart-wrap{ width:100%; }
+  .chart-wrap svg{ width:100%; height:auto; display:block; }
+  .chart-axis-label{
+    font-family:'JetBrains Mono', monospace;
+    font-size:9px;
+    fill:var(--muted-dim);
+  }
+  .chart-now-label{
+    font-family:'JetBrains Mono', monospace;
+    font-size:9px;
+    fill:var(--wind);
+  }
 </style>
 </head>
 <body>
@@ -592,9 +627,21 @@
         </div>
       </div>
 
+      <div class="panel panel-tertiary" id="panelTertiary">
+        <div class="panel-title">48-Stunden-Trend</div>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-swatch speed"></span>Wind</span>
+          <span class="legend-item"><span class="legend-swatch gust"></span>Böen</span>
+        </div>
+        <div class="chart-wrap">
+          <svg id="windChart" viewBox="0 0 600 210" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+
     </div>
     <div class="page-dots" id="pageDots">
       <span class="dot active"></span>
+      <span class="dot"></span>
       <span class="dot"></span>
     </div>
   </div>
@@ -611,6 +658,7 @@
     lat:null, lon:null, placeName:"", placeRegion:"",
     unit:"kn", // kmh, ms, mph, kn
     lastData:null,
+    hourly:null,
     autoTimer:null
   };
 
@@ -864,12 +912,16 @@
     const refreshBtn = el('refreshBtn');
     refreshBtn.classList.add('spinning');
     try{
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,apparent_temperature,relative_humidity_2m,pressure_msl,cloud_cover,precipitation&wind_speed_unit=kmh&timezone=auto`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,apparent_temperature,relative_humidity_2m,pressure_msl,cloud_cover,precipitation&hourly=wind_speed_10m,wind_gusts_10m&forecast_hours=48&wind_speed_unit=kmh&timezone=auto`;
       const res = await fetch(url);
       const json = await res.json();
       const c = json.current;
       state.lastData = c;
       renderData(c);
+      if(json.hourly){
+        state.hourly = json.hourly;
+        renderChart(json.hourly);
+      }
       setStatus("Live", true);
     }catch(e){
       setStatus("Verbindung fehlgeschlagen", false);
@@ -885,6 +937,7 @@
     const i = UNIT_ORDER.indexOf(state.unit);
     state.unit = UNIT_ORDER[(i+1) % UNIT_ORDER.length];
     if(state.lastData) renderData(state.lastData);
+    if(state.hourly) renderChart(state.hourly);
   });
 
   function renderData(c){
@@ -943,6 +996,93 @@
     } else {
       el('gustFactorValue').textContent = "—";
     }
+  }
+
+  // ---- 48-hour meteogram (mean wind speed + gusts) ----
+  function renderChart(hourly){
+    const svg = el('windChart');
+    svg.innerHTML = "";
+    const times = hourly.time || [];
+    const speedsKmh = hourly.wind_speed_10m || [];
+    const gustsKmh = hourly.wind_gusts_10m || [];
+    const n = Math.min(times.length, speedsKmh.length, gustsKmh.length);
+    if(n < 2) return;
+
+    const speeds = speedsKmh.slice(0,n).map(v=>fromKmh(v, state.unit));
+    const gusts = gustsKmh.slice(0,n).map(v=>fromKmh(v, state.unit));
+
+    const W = 600, H = 210;
+    const marginLeft = 34, marginRight = 8, marginTop = 10, marginBottom = 22;
+    const plotW = W - marginLeft - marginRight;
+    const plotH = H - marginTop - marginBottom;
+
+    const maxV = Math.max(...speeds, ...gusts) * 1.15 || 1;
+    const xFor = i => marginLeft + (i/(n-1)) * plotW;
+    const yFor = v => marginTop + plotH - (v/maxV) * plotH;
+
+    const ns = "http://www.w3.org/2000/svg";
+    const make = (tag, attrs)=>{
+      const elm = document.createElementNS(ns, tag);
+      for(const k in attrs) elm.setAttribute(k, attrs[k]);
+      return elm;
+    };
+
+    // Horizontal grid lines + y-axis value labels (4 divisions)
+    const divisions = 4;
+    for(let d=0; d<=divisions; d++){
+      const v = (maxV/divisions) * d;
+      const y = yFor(v);
+      svg.appendChild(make('line', {
+        x1:marginLeft, x2:W-marginRight, y1:y.toFixed(1), y2:y.toFixed(1),
+        stroke:'var(--panel-line)', 'stroke-width':1
+      }));
+      const label = make('text', { x:marginLeft-6, y:(y+3).toFixed(1), 'text-anchor':'end', class:'chart-axis-label' });
+      label.textContent = Math.round(v);
+      svg.appendChild(label);
+    }
+
+    // X-axis hour labels every 6 hours
+    for(let i=0; i<n; i+=6){
+      const x = xFor(i);
+      svg.appendChild(make('line', {
+        x1:x.toFixed(1), x2:x.toFixed(1), y1:marginTop, y2:H-marginBottom,
+        stroke:'var(--panel-line)', 'stroke-width':1
+      }));
+      const hourLabel = new Date(times[i]).toLocaleTimeString('de-DE', {hour:'2-digit'});
+      const label = make('text', { x:x.toFixed(1), y:H-6, 'text-anchor':'middle', class:'chart-axis-label' });
+      label.textContent = hourLabel.replace(' Uhr','') + "h";
+      svg.appendChild(label);
+    }
+
+    // "Jetzt" marker at the first data point (forecast_hours starts at the current hour)
+    const nowX = xFor(0);
+    svg.appendChild(make('line', {
+      x1:nowX.toFixed(1), x2:nowX.toFixed(1), y1:marginTop, y2:H-marginBottom,
+      stroke:'var(--wind)', 'stroke-width':1.5, 'stroke-dasharray':'3 4', opacity:'0.7'
+    }));
+    const nowLabel = make('text', { x:nowX.toFixed(1)+4, y:marginTop+10, class:'chart-now-label' });
+    nowLabel.textContent = "Jetzt";
+    svg.appendChild(nowLabel);
+
+    function pathFor(values){
+      return values.map((v,i)=> (i===0 ? 'M':'L') + xFor(i).toFixed(1) + ',' + yFor(v).toFixed(1)).join(' ');
+    }
+
+    // Filled area under the mean-speed line for readability
+    const areaD = pathFor(speeds) + ` L${xFor(n-1).toFixed(1)},${(H-marginBottom).toFixed(1)}` +
+      ` L${xFor(0).toFixed(1)},${(H-marginBottom).toFixed(1)} Z`;
+    svg.appendChild(make('path', { d:areaD, fill:'var(--wind)', opacity:'0.08', stroke:'none' }));
+
+    // Gust line (drawn first, sits behind the mean-speed line)
+    svg.appendChild(make('path', {
+      d:pathFor(gusts), fill:'none', stroke:'var(--gust)', 'stroke-width':2,
+      'stroke-linejoin':'round', 'stroke-linecap':'round', opacity:'0.9'
+    }));
+    // Mean wind-speed line on top
+    svg.appendChild(make('path', {
+      d:pathFor(speeds), fill:'none', stroke:'var(--wind)', 'stroke-width':2.5,
+      'stroke-linejoin':'round', 'stroke-linecap':'round'
+    }));
   }
 
   async function fetchMarine(){
